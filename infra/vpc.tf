@@ -28,3 +28,16 @@ resource "aws_route_table_association" "public_assoc" {
   subnet_id      = aws_subnet.public_1.id
   route_table_id = aws_route_table.public.id
 }
+resource "aws_subnet" "public_2" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.2.0/24"
+  map_public_ip_on_launch = true
+  availability_zone       = "${var.aws_region}b"
+  tags = { Name = "acme-public-2" }
+}
+
+resource "aws_route_table_association" "public_assoc_2" {
+  subnet_id      = aws_subnet.public_2.id
+  route_table_id = aws_route_table.public.id
+}
+
