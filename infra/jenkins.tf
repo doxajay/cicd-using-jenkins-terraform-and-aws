@@ -1,3 +1,19 @@
+# Lookup the latest Amazon Linux 2 AMI
+data "aws_ami" "amazon_linux" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
 # Jenkins EC2 Instance
 resource "aws_instance" "jenkins" {
   ami                         = data.aws_ami.amazon_linux.id
@@ -24,3 +40,4 @@ output "jenkins_ip" {
   description = "Public IP of the Jenkins server"
   value       = aws_eip.jenkins_eip.public_ip
 }
+
