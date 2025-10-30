@@ -1,27 +1,20 @@
-# Security group for Jenkins
-resource "aws_security_group" "jenkins_sg" {
-  name        = "jenkins-sg"
-  description = "Allow SSH and HTTP access to Jenkins"
+# security-groups.tf
+# (All Jenkins-related rules have been removed, since they're defined in jenkins.tf)
+
+# Example: Security group for EKS nodes (if you have EKS configured)
+resource "aws_security_group" "eks_sg" {
+  name        = "eks-sg"
+  description = "Allow EKS cluster communication"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "Jenkins Web UI"
-    from_port   = 8080
-    to_port     = 8080
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
-    description = "Allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -29,6 +22,6 @@ resource "aws_security_group" "jenkins_sg" {
   }
 
   tags = {
-    Name = "jenkins-sg"
+    Name = "eks-sg"
   }
 }
