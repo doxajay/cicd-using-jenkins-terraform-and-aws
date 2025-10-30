@@ -4,7 +4,7 @@ resource "aws_instance" "jenkins" {
   subnet_id     = aws_subnet.public_1.id
   vpc_security_group_ids = [aws_security_group.jenkins_sg.id]
   associate_public_ip_address = true
-  key_name = "your-keypair-name"  # replace with your real EC2 key pair name
+  key_name = "acme-key"  # replace with your real EC2 key pair name
 
   user_data = <<-EOF
     #!/bin/bash
@@ -21,4 +21,5 @@ resource "aws_instance" "jenkins" {
     Name = "jenkins-server"
   }
 }
+
 
