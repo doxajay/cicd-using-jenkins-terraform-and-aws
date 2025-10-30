@@ -1,5 +1,5 @@
 resource "aws_instance" "jenkins" {
-  ami           = "ami-0c55b159cbfafe1f0"  # Amazon Linux 2 in us-west-2
+  ami           = "ami-0892d3c7ee96c0bf7"  # Amazon Linux 2 in us-west-2
   instance_type = "t3.medium"
   subnet_id     = aws_subnet.public_1.id
   vpc_security_group_ids = [aws_security_group.jenkins_sg.id]
@@ -50,3 +50,4 @@ resource "aws_security_group" "jenkins_sg" {
 output "jenkins_public_ip" {
   value = aws_instance.jenkins.public_ip
 }
+
