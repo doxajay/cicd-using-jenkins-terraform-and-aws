@@ -57,7 +57,7 @@ resource "aws_instance" "jenkins" {
   key_name                     = var.key_name
 
   # Jenkins install script (placed inside /infra/jenkins/install_jenkins.sh)
-  user_data = file("${path.module}/jenkins/install_jenkins.sh")
+  # user_data = file("${path.module}/jenkins/install_jenkins.sh")
 
   tags = {
     Name = "jenkins-server"
@@ -84,3 +84,4 @@ output "jenkins_ip" {
 output "jenkins_url" {
   value = "http://${aws_eip.jenkins_eip.public_ip}:8080"
 }
+
