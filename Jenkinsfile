@@ -53,65 +53,62 @@ pipeline {
                 script {
                     echo "🌀 Triggering Terraform Cloud run for workspace ${TFC_WORKSPACE}..."
 
-                    // Get workspace ID
                     def workspace_id = sh(
-                        script: """
-                        curl -s \\
-                        --header "Authorization: Bearer $TF_API_TOKEN" \\
-                        https://app.terraform.io/api/v2/organizations/$TFC_ORG/workspaces/$TFC_WORKSPACE | jq -r .data.id
-                        """,
+                        script: '''
+                        curl -s \
+                        --header "Authorization: Bearer ${TF_API_TOKEN}" \
+                        https://app.terraform.io/api/v2/organizations/${TFC_ORG}/workspaces/${TFC_WORKSPACE} | jq -r .data.id
+                        ''',
                         returnStdout: true
                     ).trim()
 
-                    // Start a run
                     def run_id = sh(
-                        script: """
-                        curl -s \\
-                        --header "Authorization: Bearer $TF_API_TOKEN" \\
-                        --header "Content-Type: application/vnd.api+json" \\
-                        --request POST \\
-                        --data '{
-                            "data": {
-                                "attributes": {
-                                    "message": "Triggered from Jenkins pipeline",
-                                    "is-destroy": false
+                        script: '''
+                        curl -s \
+                        --header "Authorization: Bearer ${TF_API_TOKEN}" \
+                        --header "Content-Type: application/vnd.api+json" \
+                        --request POST \
+                        --data "{
+                            \\"data\\": {
+                                \\"attributes\\": {
+                                    \\"message\\": \\"Triggered from Jenkins pipeline\\",
+                                    \\"is-destroy\\": false
                                 },
-                                "type": "runs",
-                                "relationships": {
-                                    "workspace": {
-                                        "data": {
-                                            "type": "workspaces",
-                                            "id": "${workspace_id}"
+                                \\"type\\": \\"runs\\",
+                                \\"relationships\\": {
+                                    \\"workspace\\": {
+                                        \\"data\\": {
+                                            \\"type\\": \\"workspaces\\",
+                                            \\"id\\": \\"${workspace_id}\\"
                                         }
                                     }
                                 }
                             }
-                        }' \\
+                        }" \
                         https://app.terraform.io/api/v2/runs | jq -r .data.id
-                        """,
+                        ''',
                         returnStdout: true
                     ).trim()
 
                     echo "🧩 Terraform Cloud run triggered — Run ID: ${run_id}"
 
-                    // Poll run status
                     echo "⏳ Waiting for Terraform Cloud run to finish..."
-                    sh """
+                    sh '''
                     while true; do
-                        STATUS=$(curl -s \\
-                            --header "Authorization: Bearer $TF_API_TOKEN" \\
+                        STATUS=$(curl -s \
+                            --header "Authorization: Bearer ${TF_API_TOKEN}" \
                             https://app.terraform.io/api/v2/runs/${run_id} | jq -r .data.attributes.status)
-                        echo "Current run status: \$STATUS"
-                        if [ "\$STATUS" = "applied" ] || [ "\$STATUS" = "planned_and_finished" ]; then
+                        echo "Current run status: $STATUS"
+                        if [ "$STATUS" = "applied" ] || [ "$STATUS" = "planned_and_finished" ]; then
                             echo "✅ Terraform apply completed successfully!"
                             break
-                        elif [ "\$STATUS" = "errored" ] || [ "\$STATUS" = "canceled" ]; then
+                        elif [ "$STATUS" = "errored" ] || [ "$STATUS" = "canceled" ]; then
                             echo "❌ Terraform run failed or was canceled!"
                             exit 1
                         fi
                         sleep 20
                     done
-                    """
+                    '''
                 }
             }
         }
@@ -127,10 +124,3 @@ pipeline {
 
     post {
         failure {
-            echo "❌ Build failed — check Jenkins logs and Terraform Cloud run dashboard."
-        }
-        success {
-            echo "✅ All stages completed successfully — EKS & ECR deployed and ready."
-        }
-    }
-}
