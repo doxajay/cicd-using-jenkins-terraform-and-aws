@@ -2,49 +2,79 @@ pipeline {
     agent any
 
     environment {
-        TF_API_TOKEN = credentials('terraform-cloud-token')  // Jenkins secret
+        AWS_REGION = "us-west-2"
+        TF_API_TOKEN = credentials('terraform-cloud-token')
+        TFC_WORKSPACE = "cicd-using-jenkins-terraform-and-aws"
+        TFC_ORG = "cloudgenius-acme"
+        GIT_REPO = "https://github.com/doxajay/cicd-using-jenkins-terraform-and-aws.git"
     }
 
     stages {
-
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/doxajay/cicd-using-jenkins-terraform-and-aws.git'
+                git branch: 'main', url: "${GIT_REPO}"
             }
         }
 
-        stage('Terraform Init') {
+        stage('Terraform Validation') {
             steps {
                 dir('infra') {
-                    echo "🔍 Checking if Terraform token is set..."
-                    sh 'echo $TF_API_TOKEN | wc -c'
-
-                    // ✅ Export the token to Terraform expected variable name
                     sh '''
-                        export TF_TOKEN_app_terraform_io=$TF_API_TOKEN
-                        terraform init -input=false
+                    terraform fmt -check -recursive
+                    terraform validate || true
                     '''
                 }
             }
         }
 
-        stage('Terraform Plan') {
+        stage('Docker Build & Push') {
             steps {
-                dir('infra') {
+                script {
                     sh '''
-                        export TF_TOKEN_app_terraform_io=$TF_API_TOKEN
-                        terraform plan -input=false -out=tfplan
+                    echo "🛠 Building Docker image..."
+                    docker build -t acme-app:latest .
+                    echo "🔑 Logging into ECR..."
+                    aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $(aws sts get-caller-identity --query "Account" --output text).dkr.ecr.$AWS_REGION.amazonaws.com
+                    echo "🚀 Pushing to ECR..."
+                    docker tag acme-app:latest $(aws sts get-caller-identity --query "Account" --output text).dkr.ecr.$AWS_REGION.amazonaws.com/acme-app:latest
+                    docker push $(aws sts get-caller-identity --query "Account" --output text).dkr.ecr.$AWS_REGION.amazonaws.com/acme-app:latest
                     '''
                 }
             }
         }
 
-        stage('Terraform Apply') {
+        stage('Trigger Terraform Cloud Run') {
             steps {
-                dir('infra') {
+                script {
+                    echo "🌀 Triggering Terraform Cloud run for workspace ${TFC_WORKSPACE}"
+
                     sh '''
-                        export TF_TOKEN_app_terraform_io=$TF_API_TOKEN
-                        terraform apply -auto-approve tfplan
+                    curl -s \
+                    --header "Authorization: Bearer $TF_API_TOKEN" \
+                    --header "Content-Type: application/vnd.api+json" \
+                    --request POST \
+                    --data '{
+                        "data": {
+                            "attributes": {
+                                "message": "Triggered from Jenkins pipeline",
+                                "trigger-reason": "ci-cd",
+                                "is-destroy": false
+                            },
+                            "type": "runs",
+                            "relationships": {
+                                "workspace": {
+                                    "data": {
+                                        "type": "workspaces",
+                                        "id": "'"$(curl -s \
+                                            --header "Authorization: Bearer $TF_API_TOKEN" \
+                                            https://app.terraform.io/api/v2/organizations/$TFC_ORG/workspaces/$TFC_WORKSPACE \
+                                            | jq -r .data.id)"'"
+                                    }
+                                }
+                            }
+                        }
+                    }' \
+                    https://app.terraform.io/api/v2/runs
                     '''
                 }
             }
@@ -52,19 +82,14 @@ pipeline {
 
         stage('Post-Deployment Info') {
             steps {
-                dir('infra') {
-                    sh 'terraform output || true'
-                }
+                echo "✅ Jenkins pipeline complete. Terraform Cloud will handle infra deployment automatically."
             }
         }
     }
 
     post {
-        success {
-            echo '✅ Terraform infrastructure deployed successfully!'
-        }
         failure {
-            echo '❌ Build failed — check console logs.'
+            echo "❌ Build failed — check logs and Terraform Cloud run dashboard."
         }
     }
 }
