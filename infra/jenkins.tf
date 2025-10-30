@@ -1,26 +1,26 @@
+# Jenkins EC2 Instance
 resource "aws_instance" "jenkins" {
-  ami           = "ami-0d593311db5abb72b"  # Amazon Linux 2 (for us-west-2)
-  instance_type = "t3.small"
-  subnet_id     = aws_subnet.public_1.id
-  vpc_security_group_ids = [aws_security_group.jenkins_sg.id]
-  associate_public_ip_address = true
-  key_name = "acme-key"  # replace with your real EC2 key pair name
-
-  user_data = <<-EOF
-    #!/bin/bash
-    yum update -y
-    amazon-linux-extras install java-openjdk11 -y
-    wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
-    rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
-    yum install jenkins -y
-    systemctl enable jenkins
-    systemctl start jenkins
-  EOF
+  ami                         = data.aws_ami.amazon_linux.id
+  instance_type               = "t3.small"
+  subnet_id                   = aws_subnet.public_1.id
+  key_name                    = var.key_name
+  associate_public_ip_address  = true
+  vpc_security_group_ids       = [aws_security_group.jenkins_sg.id]
+  user_data                   = file("jenkins/install_jenkins.sh")
 
   tags = {
     Name = "jenkins-server"
   }
 }
 
+# Allocate an Elastic IP to persist public IP
+resource "aws_eip" "jenkins_eip" {
+  instance = aws_instance.jenkins.id
+  vpc      = true
+}
 
-
+# Output for Jenkins connection
+output "jenkins_ip" {
+  description = "Public IP of the Jenkins server"
+  value       = aws_eip.jenkins_eip.public_ip
+}
