@@ -1,8 +1,8 @@
-#############################################
-# Jenkins EC2 Instance with Elastic IP
-#############################################
+# =============================
+# JENKINS EC2 INSTANCE SETUP
+# =============================
 
-# Get the latest Amazon Linux 2 AMI
+# Lookup latest Amazon Linux 2 AMI
 data "aws_ami" "amazon_linux" {
   most_recent = true
   owners      = ["amazon"]
@@ -13,38 +13,58 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
-#############################################
-# Jenkins EC2 Instance
-#############################################
+# Jenkins Security Group (open port 8080 + SSH)
+resource "aws_security_group" "jenkins_sg" {
+  name        = "jenkins-sg"
+  description = "Security group for Jenkins server"
+  vpc_id      = aws_vpc.main.id
 
+  ingress {
+    description = "Allow HTTP (Jenkins UI)"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow SSH access"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "jenkins-sg"
+  }
+}
+
+# Jenkins EC2 instance
 resource "aws_instance" "jenkins" {
-  ami                    = data.aws_ami.amazon_linux.id
-  instance_type          = "t3.small"
-  subnet_id              = aws_subnet.public_1.id
-  vpc_security_group_ids = [aws_security_group.jenkins_sg.id]
-  key_name               = var.key_name
-  associate_public_ip_address = true
+  ami                         = data.aws_ami.amazon_linux.id
+  instance_type                = "t3.small"
+  subnet_id                    = aws_subnet.public_1.id
+  vpc_security_group_ids       = [aws_security_group.jenkins_sg.id]
+  associate_public_ip_address  = true
+  key_name                     = var.key_name
 
-  user_data = <<-EOF
-              #!/bin/bash
-              yum update -y
-              amazon-linux-extras install java-openjdk17 -y
-              wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
-              rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
-              yum install jenkins git -y
-              systemctl enable jenkins
-              systemctl start jenkins
-              EOF
+  # Jenkins install script (placed inside /infra/jenkins/install_jenkins.sh)
+  user_data = file("${path.module}/jenkins/install_jenkins.sh")
 
   tags = {
     Name = "jenkins-server"
   }
 }
 
-#############################################
-# Elastic IP for Jenkins
-#############################################
-
+# Allocate Elastic IP to Jenkins instance
 resource "aws_eip" "jenkins_eip" {
   instance = aws_instance.jenkins.id
   domain   = "vpc"
@@ -54,10 +74,9 @@ resource "aws_eip" "jenkins_eip" {
   }
 }
 
-#############################################
-# Outputs
-#############################################
-
+# =============================
+# OUTPUTS
+# =============================
 output "jenkins_ip" {
   value = aws_eip.jenkins_eip.public_ip
 }
