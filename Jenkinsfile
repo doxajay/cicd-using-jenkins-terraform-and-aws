@@ -2,16 +2,15 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-west-2'
-        AWS_ACCOUNT_ID = 'YOUR_ACCOUNT_ID'
-        TF_API_TOKEN = credentials('terraform-cloud-token')
-        ECR_REPO = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/terraform-eks-app"
-        TFC_ORG = "cloudgenius-acme"
-        TFC_WORKSPACE = "cicd-using-jenkins-terraform-and-aws"
+        AWS_REGION       = "us-west-2"
+        TF_CLOUD_ORG     = "cloudgenius-acme"
+        TF_WORKSPACE     = "cicd-using-jenkins-terraform-and-aws"
+        TF_API_TOKEN     = credentials('terraform-cloud-token')
+        AWS_CREDENTIALS  = credentials('aws-jenkins-creds')
+        APP_NAME         = "terraform-eks-app"
     }
 
     stages {
-
         stage('Checkout Code') {
             steps {
                 git branch: 'main',
@@ -22,7 +21,7 @@ pipeline {
         stage('Terraform Init') {
             steps {
                 dir('infra') {
-                    echo "🔍 Initializing Terraform..."
+                    echo '🔍 Initializing Terraform...'
                     withEnv(["TF_TOKEN_app_terraform_io=${TF_API_TOKEN}"]) {
                         sh 'terraform init -input=false'
                     }
@@ -33,7 +32,7 @@ pipeline {
         stage('Terraform Validate') {
             steps {
                 dir('infra') {
-                    echo "✅ Validating Terraform configuration..."
+                    echo '✅ Validating Terraform configuration...'
                     sh 'terraform validate'
                 }
             }
@@ -42,7 +41,7 @@ pipeline {
         stage('Terraform Plan') {
             steps {
                 dir('infra') {
-                    echo "🧩 Running Terraform Plan..."
+                    echo '🧩 Running Terraform Plan...'
                     withEnv(["TF_TOKEN_app_terraform_io=${TF_API_TOKEN}"]) {
                         sh 'terraform plan -input=false'
                     }
@@ -50,15 +49,31 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build & Push Docker Image') {
             steps {
                 dir('app') {
-                    echo "🛠 Building Docker image..."
-                    sh '''
-                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPO}
-                        docker build -t ${ECR_REPO}:latest .
-                        docker push ${ECR_REPO}:latest
-                    '''
+                    echo '🛠 Building Docker image...'
+                    script {
+                        // Get AWS account ID dynamically
+                        def accountId = sh(
+                            script: "aws sts get-caller-identity --query Account --output text",
+                            returnStdout: true
+                        ).trim()
+
+                        def ecrRepo = "${accountId}.dkr.ecr.${AWS_REGION}.amazonaws.com/${APP_NAME}"
+
+                        // Authenticate Docker to ECR
+                        sh """
+                            aws ecr get-login-password --region ${AWS_REGION} | \
+                            docker login --username AWS --password-stdin ${accountId}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                        """
+
+                        // Build and push Docker image
+                        sh """
+                            docker build -t ${ecrRepo}:latest .
+                            docker push ${ecrRepo}:latest
+                        """
+                    }
                 }
             }
         }
@@ -66,9 +81,9 @@ pipeline {
         stage('Terraform Apply') {
             steps {
                 dir('infra') {
-                    echo "🚀 Applying Terraform configuration..."
+                    echo '🚀 Applying Terraform changes...'
                     withEnv(["TF_TOKEN_app_terraform_io=${TF_API_TOKEN}"]) {
-                        sh 'terraform apply -auto-approve'
+                        sh 'terraform apply -auto-approve -input=false'
                     }
                 }
             }
@@ -76,14 +91,15 @@ pipeline {
 
         stage('Post-Deployment Info') {
             steps {
-                echo "🎉 Deployment complete. Infrastructure and Docker image are ready!"
+                echo '✅ Deployment completed successfully.'
+                sh 'terraform output'
             }
         }
     }
 
     post {
         success {
-            echo '✅ Pipeline executed successfully!'
+            echo '🎉 Pipeline completed successfully.'
         }
         failure {
             echo '❌ Build failed — check console logs.'
