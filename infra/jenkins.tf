@@ -22,7 +22,7 @@ resource "aws_instance" "jenkins" {
   key_name                    = var.key_name
   associate_public_ip_address  = true
   vpc_security_group_ids       = [aws_security_group.jenkins_sg.id]
-  user_data                   = file("jenkins/install_jenkins.sh")
+  #user_data                   = file("jenkins/install_jenkins.sh")
 
   tags = {
     Name = "jenkins-server"
@@ -40,4 +40,5 @@ output "jenkins_ip" {
   description = "Public IP of the Jenkins server"
   value       = aws_eip.jenkins_eip.public_ip
 }
+
 
