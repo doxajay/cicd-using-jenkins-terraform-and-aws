@@ -1,6 +1,6 @@
 resource "aws_instance" "jenkins" {
   ami           = "ami-0d593311db5abb72b"  # Amazon Linux 2 (for us-west-2)
-  instance_type = "t3.micro"
+  instance_type = "t3.small"
   subnet_id     = aws_subnet.public_1.id
   vpc_security_group_ids = [aws_security_group.jenkins_sg.id]
   associate_public_ip_address = true
@@ -21,5 +21,6 @@ resource "aws_instance" "jenkins" {
     Name = "jenkins-server"
   }
 }
+
 
 
