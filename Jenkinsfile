@@ -2,15 +2,14 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION       = "us-west-2"
-        TF_CLOUD_ORG     = "cloudgenius-acme"
-        TF_WORKSPACE     = "cicd-using-jenkins-terraform-and-aws"
-        TF_API_TOKEN     = credentials('terraform-cloud-token')
-        AWS_CREDENTIALS  = credentials('aws-jenkins-creds')
-        APP_NAME         = "terraform-eks-app"
+        AWS_REGION = "us-west-2"
+        TF_CLOUD_ORG = "cloudgenius-acme"
+        TF_WORKSPACE = "cicd-using-jenkins-terraform-and-aws"
+        TF_TOKEN_app_terraform_io = credentials('tf-api-token')
     }
 
     stages {
+
         stage('Checkout Code') {
             steps {
                 git branch: 'main',
@@ -21,8 +20,8 @@ pipeline {
         stage('Terraform Init') {
             steps {
                 dir('infra') {
-                    echo '🔍 Initializing Terraform...'
-                    withEnv(["TF_TOKEN_app_terraform_io=${TF_API_TOKEN}"]) {
+                    echo "🔍 Initializing Terraform..."
+                    withEnv(["TF_TOKEN_app_terraform_io=${TF_TOKEN_app_terraform_io}"]) {
                         sh 'terraform init -input=false'
                     }
                 }
@@ -32,7 +31,7 @@ pipeline {
         stage('Terraform Validate') {
             steps {
                 dir('infra') {
-                    echo '✅ Validating Terraform configuration...'
+                    echo "✅ Validating Terraform configuration..."
                     sh 'terraform validate'
                 }
             }
@@ -41,38 +40,26 @@ pipeline {
         stage('Terraform Plan') {
             steps {
                 dir('infra') {
-                    echo '🧩 Running Terraform Plan...'
-                    withEnv(["TF_TOKEN_app_terraform_io=${TF_API_TOKEN}"]) {
+                    echo "🧩 Running Terraform Plan..."
+                    withEnv(["TF_TOKEN_app_terraform_io=${TF_TOKEN_app_terraform_io}"]) {
                         sh 'terraform plan -input=false'
                     }
                 }
             }
         }
 
-        stage('Build & Push Docker Image') {
+        stage('Build Docker Image') {
             steps {
                 dir('app') {
-                    echo '🛠 Building Docker image...'
-                    script {
-                        // Get AWS account ID dynamically
-                        def accountId = sh(
-                            script: "aws sts get-caller-identity --query Account --output text",
-                            returnStdout: true
-                        ).trim()
-
-                        def ecrRepo = "${accountId}.dkr.ecr.${AWS_REGION}.amazonaws.com/${APP_NAME}"
-
-                        // Authenticate Docker to ECR
-                        sh """
-                            aws ecr get-login-password --region ${AWS_REGION} | \
-                            docker login --username AWS --password-stdin ${accountId}.dkr.ecr.${AWS_REGION}.amazonaws.com
-                        """
-
-                        // Build and push Docker image
-                        sh """
-                            docker build -t ${ecrRepo}:latest .
-                            docker push ${ecrRepo}:latest
-                        """
+                    echo "🛠 Building Docker image..."
+                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
+                        sh '''
+                            AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+                            aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                            docker build -t terraform-eks-app .
+                            docker tag terraform-eks-app:latest ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/terraform-eks-app:latest
+                            docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/terraform-eks-app:latest
+                        '''
                     }
                 }
             }
@@ -81,9 +68,10 @@ pipeline {
         stage('Terraform Apply') {
             steps {
                 dir('infra') {
-                    echo '🚀 Applying Terraform changes...'
-                    withEnv(["TF_TOKEN_app_terraform_io=${TF_API_TOKEN}"]) {
-                        sh 'terraform apply -auto-approve -input=false'
+                    echo "🚀 Applying Terraform configuration..."
+                    withEnv(["TF_TOKEN_app_terraform_io=${TF_TOKEN_app_terraform_io}"]) {
+                        input message: 'Approve deployment?', ok: 'Deploy'
+                        sh 'terraform apply -auto-approve'
                     }
                 }
             }
@@ -91,15 +79,17 @@ pipeline {
 
         stage('Post-Deployment Info') {
             steps {
-                echo '✅ Deployment completed successfully.'
-                sh 'terraform output'
+                dir('infra') {
+                    echo "🌐 Deployment complete!"
+                    sh 'terraform output'
+                }
             }
         }
     }
 
     post {
         success {
-            echo '🎉 Pipeline completed successfully.'
+            echo '✅ Deployment successful!'
         }
         failure {
             echo '❌ Build failed — check console logs.'
