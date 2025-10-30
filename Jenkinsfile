@@ -2,12 +2,11 @@ pipeline {
     agent any
 
     environment {
-        TF_CLOUD_ORG = "cloudgenius-acme"
-        TF_WORKSPACE = "cicd-using-jenkins-terraform-and-aws"
-        TF_API_TOKEN = credentials('terraform-cloud-token')
+        TF_API_TOKEN = credentials('terraform-cloud-token')  // Jenkins secret with your Terraform Cloud token
     }
 
     stages {
+
         stage('Checkout Code') {
             steps {
                 git branch: 'main', url: 'https://github.com/doxajay/cicd-using-jenkins-terraform-and-aws.git'
@@ -17,9 +16,9 @@ pipeline {
         stage('Terraform Init') {
             steps {
                 dir('infra') {
-                    sh '''
-                    terraform init -input=false
-                    '''
+                    echo "Checking if Terraform token is set..."
+                    sh 'echo $TF_API_TOKEN | wc -c'
+                    sh 'terraform init -input=false'
                 }
             }
         }
@@ -34,9 +33,8 @@ pipeline {
 
         stage('Terraform Apply') {
             steps {
-                input message: 'Approve apply?', ok: 'Deploy'
                 dir('infra') {
-                    sh 'terraform apply -input=false -auto-approve tfplan'
+                    sh 'terraform apply -auto-approve tfplan'
                 }
             }
         }
@@ -44,7 +42,7 @@ pipeline {
         stage('Post-Deployment Info') {
             steps {
                 dir('infra') {
-                    sh 'terraform output || true'
+                    sh 'terraform output'
                 }
             }
         }
